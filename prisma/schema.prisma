@@ -1,0 +1,792 @@
+// This is your Prisma schema file
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Management
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  name          String
+  role          Role      @default(USER)
+  companyId     String?
+  company       Company?  @relation(fields: [companyId], references: [id])
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  createdInvoices     Invoice[]      @relation("InvoiceCreator")
+  createdPayments     Payment[]      @relation("PaymentCreator")
+  createdJournals     JournalEntry[] @relation("JournalCreator")
+
+  @@map("users")
+}
+
+enum Role {
+  SUPERADMIN
+  COMPANY_ADMIN
+  ACCOUNTANT
+  USER
+}
+
+// Company/Organization
+model Company {
+  id              String    @id @default(uuid())
+  name            String
+  email           String?
+  phone           String?
+  address         String?
+  city            String?
+  state           String?
+  country         String?
+  zipCode         String?
+  taxId           String?   // GST/VAT/Tax ID
+  logo            String?
+  fiscalYearStart Int       @default(1)  // Month (1-12)
+  baseCurrency    String    @default("USD")
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  users           User[]
+  accounts        Account[]
+  customers       Customer[]
+  suppliers       Supplier[]
+  products        Product[]
+  invoices          Invoice[]
+  bills             Bill[]
+  payments          Payment[]
+  expenses          Expense[]
+  journalEntries    JournalEntry[]
+  salesQuotations   SalesQuotation[]
+  salesOrders       SalesOrder[]
+  deliveryChallans  DeliveryChallan[]
+  salesReturns      SalesReturn[]
+  purchaseQuotations PurchaseQuotation[]
+  purchaseOrders    PurchaseOrder[]
+  goodsReceipts     GoodsReceipt[]
+  purchaseReturns   PurchaseReturn[]
+  ledgerEntries     LedgerEntry[]
+
+  @@map("companies")
+}
+
+// Chart of Accounts
+model Account {
+  id              String        @id @default(uuid())
+  accountCode     String        // e.g., "1000", "2000"
+  accountName     String
+  accountType     AccountType
+  parentId        String?
+  parent          Account?      @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children        Account[]     @relation("AccountHierarchy")
+  balance         Float         @default(0)
+  description     String?
+  isActive        Boolean       @default(true)
+  companyId       String
+  company         Company       @relation(fields: [companyId], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  journalLineItems  JournalLineItem[]
+  ledgerEntries     LedgerEntry[]
+
+  @@unique([companyId, accountCode])
+  @@map("accounts")
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+// Customers
+model Customer {
+  id              String    @id @default(uuid())
+  customerCode    String
+  name            String
+  email           String?
+  phone           String?
+  address         String?
+  city            String?
+  state           String?
+  country         String?
+  zipCode         String?
+  taxId           String?   // GST/VAT number
+  creditLimit     Float?
+  creditPeriodDays Int      @default(30)
+  balance         Float     @default(0)
+  companyId       String
+  company         Company   @relation(fields: [companyId], references: [id])
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  invoices          Invoice[]
+  salesQuotations   SalesQuotation[]
+  salesOrders       SalesOrder[]
+  deliveryChallans  DeliveryChallan[]
+  salesReturns      SalesReturn[]
+
+  @@unique([companyId, customerCode])
+  @@map("customers")
+}
+
+// Suppliers/Vendors
+model Supplier {
+  id              String    @id @default(uuid())
+  supplierCode    String
+  name            String
+  email           String?
+  phone           String?
+  address         String?
+  city            String?
+  state           String?
+  country         String?
+  zipCode         String?
+  taxId           String?
+  creditPeriodDays Int      @default(30)
+  balance         Float     @default(0)
+  companyId       String
+  company         Company   @relation(fields: [companyId], references: [id])
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  bills               Bill[]
+  purchaseQuotations  PurchaseQuotation[]
+  purchaseOrders      PurchaseOrder[]
+  goodsReceipts       GoodsReceipt[]
+  purchaseReturns     PurchaseReturn[]
+
+  @@unique([companyId, supplierCode])
+  @@map("suppliers")
+}
+
+// Products/Services
+model Product {
+  id              String        @id @default(uuid())
+  productCode     String
+  name            String
+  description     String?
+  category        String?
+  unit            String        @default("pcs")  // pcs, kg, liter, etc.
+  sellingPrice    Float
+  purchasePrice   Float?
+  taxRate         Float         @default(0)      // percentage
+  currentStock    Float         @default(0)
+  reorderLevel    Float?
+  companyId       String
+  company         Company       @relation(fields: [companyId], references: [id])
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  invoiceItems          InvoiceItem[]
+  billItems             BillItem[]
+  salesQuotationItems   SalesQuotationItem[]
+  salesOrderItems       SalesOrderItem[]
+  deliveryChallanItems  DeliveryChallanItem[]
+  salesReturnItems      SalesReturnItem[]
+  purchaseQuotationItems PurchaseQuotationItem[]
+  purchaseOrderItems    PurchaseOrderItem[]
+  goodsReceiptItems     GoodsReceiptItem[]
+  purchaseReturnItems   PurchaseReturnItem[]
+
+  @@unique([companyId, productCode])
+  @@map("products")
+}
+
+// Sales Invoices
+model Invoice {
+  id              String        @id @default(uuid())
+  invoiceNumber   String
+  customerId      String
+  customer        Customer      @relation(fields: [customerId], references: [id])
+  invoiceDate     DateTime      @default(now())
+  dueDate         DateTime
+  status          InvoiceStatus @default(DRAFT)
+  subtotal        Float
+  taxAmount       Float
+  discountAmount  Float         @default(0)
+  totalAmount     Float
+  paidAmount      Float         @default(0)
+  balanceAmount   Float
+  notes           String?
+  termsConditions String?
+  companyId       String
+  company         Company       @relation(fields: [companyId], references: [id])
+  createdById     String
+  createdBy       User          @relation("InvoiceCreator", fields: [createdById], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  items           InvoiceItem[]
+  payments        Payment[]
+  salesOrderId    String?
+  salesOrder      SalesOrder?    @relation(fields: [salesOrderId], references: [id])
+  salesReturns    SalesReturn[]
+
+  @@unique([companyId, invoiceNumber])
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model InvoiceItem {
+  id              String    @id @default(uuid())
+  invoiceId       String
+  invoice         Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId       String?
+  product         Product?  @relation(fields: [productId], references: [id])
+  description     String
+  quantity        Float
+  unitPrice       Float
+  taxRate         Float     @default(0)
+  taxAmount       Float
+  discountAmount  Float     @default(0)
+  totalAmount     Float
+  createdAt       DateTime  @default(now())
+
+  @@map("invoice_items")
+}
+
+// Purchase Bills
+model Bill {
+  id              String      @id @default(uuid())
+  billNumber      String
+  supplierId      String
+  supplier        Supplier    @relation(fields: [supplierId], references: [id])
+  billDate        DateTime    @default(now())
+  dueDate         DateTime
+  status          BillStatus  @default(DRAFT)
+  subtotal        Float
+  taxAmount       Float
+  discountAmount  Float       @default(0)
+  totalAmount     Float
+  paidAmount      Float       @default(0)
+  balanceAmount   Float
+  notes           String?
+  companyId       String
+  company         Company     @relation(fields: [companyId], references: [id])
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  items           BillItem[]
+  payments        Payment[]
+
+  @@unique([companyId, billNumber])
+  @@map("bills")
+}
+
+enum BillStatus {
+  DRAFT
+  APPROVED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model BillItem {
+  id              String    @id @default(uuid())
+  billId          String
+  bill            Bill      @relation(fields: [billId], references: [id], onDelete: Cascade)
+  productId       String?
+  product         Product?  @relation(fields: [productId], references: [id])
+  description     String
+  quantity        Float
+  unitPrice       Float
+  taxRate         Float     @default(0)
+  taxAmount       Float
+  discountAmount  Float     @default(0)
+  totalAmount     Float
+  createdAt       DateTime  @default(now())
+
+  @@map("bill_items")
+}
+
+// Payments
+model Payment {
+  id              String        @id @default(uuid())
+  paymentNumber   String
+  paymentDate     DateTime      @default(now())
+  amount          Float
+  paymentMethod   PaymentMethod
+  referenceNumber String?
+  notes           String?
+  invoiceId       String?
+  invoice         Invoice?      @relation(fields: [invoiceId], references: [id])
+  billId          String?
+  bill            Bill?         @relation(fields: [billId], references: [id])
+  companyId       String
+  company         Company       @relation(fields: [companyId], references: [id])
+  createdById     String
+  createdBy       User          @relation("PaymentCreator", fields: [createdById], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([companyId, paymentNumber])
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CREDIT_CARD
+  DEBIT_CARD
+  CHEQUE
+  UPI
+  OTHER
+}
+
+// Expenses
+model Expense {
+  id              String    @id @default(uuid())
+  expenseNumber   String
+  expenseDate     DateTime  @default(now())
+  category        String
+  amount          Float
+  taxAmount       Float     @default(0)
+  totalAmount     Float
+  paymentMethod   PaymentMethod
+  description     String?
+  receipt         String?   // file path
+  companyId       String
+  company         Company   @relation(fields: [companyId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([companyId, expenseNumber])
+  @@map("expenses")
+}
+
+// Journal Entries (for manual accounting entries)
+model JournalEntry {
+  id              String            @id @default(uuid())
+  journalNumber   String
+  entryDate       DateTime          @default(now())
+  description     String
+  totalDebit      Float
+  totalCredit     Float
+  status          JournalStatus     @default(DRAFT)
+  companyId       String
+  company         Company           @relation(fields: [companyId], references: [id])
+  createdById     String
+  createdBy       User              @relation("JournalCreator", fields: [createdById], references: [id])
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  lineItems       JournalLineItem[]
+
+  @@unique([companyId, journalNumber])
+  @@map("journal_entries")
+}
+
+enum JournalStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+model JournalLineItem {
+  id              String        @id @default(uuid())
+  journalEntryId  String
+  journalEntry    JournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  accountId       String
+  account         Account       @relation(fields: [accountId], references: [id])
+  description     String?
+  debitAmount     Float         @default(0)
+  creditAmount    Float         @default(0)
+  createdAt       DateTime      @default(now())
+
+  @@map("journal_line_items")
+}
+
+// ============ SALES PROCESS MODELS ============
+
+// Sales Quotations
+model SalesQuotation {
+  id                String                  @id @default(uuid())
+  quotationNumber   String
+  customerId        String
+  customer          Customer                @relation(fields: [customerId], references: [id])
+  companyId         String
+  company           Company                 @relation(fields: [companyId], references: [id])
+  quotationDate     DateTime                @default(now())
+  validUntil        DateTime?
+  subtotal          Float
+  taxAmount         Float
+  discountAmount    Float                   @default(0)
+  totalAmount       Float
+  terms             String?
+  notes             String?
+  status            String                  @default("draft") // draft, sent, accepted, rejected, expired
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  items             SalesQuotationItem[]
+  salesOrders       SalesOrder[]
+
+  @@unique([companyId, quotationNumber])
+  @@map("sales_quotations")
+}
+
+model SalesQuotationItem {
+  id                String           @id @default(uuid())
+  quotationId       String
+  quotation         SalesQuotation   @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  productId         String?
+  product           Product?         @relation(fields: [productId], references: [id])
+  description       String
+  quantity          Float
+  unitPrice         Float
+  taxRate           Float            @default(0)
+  taxAmount         Float
+  discountAmount    Float            @default(0)
+  totalAmount       Float
+  createdAt         DateTime         @default(now())
+
+  @@map("sales_quotation_items")
+}
+
+// Sales Orders
+model SalesOrder {
+  id                String              @id @default(uuid())
+  orderNumber       String
+  quotationId       String?
+  quotation         SalesQuotation?     @relation(fields: [quotationId], references: [id])
+  customerId        String
+  customer          Customer            @relation(fields: [customerId], references: [id])
+  companyId         String
+  company           Company             @relation(fields: [companyId], references: [id])
+  orderDate         DateTime            @default(now())
+  expectedDelivery  DateTime?
+  subtotal          Float
+  taxAmount         Float
+  discountAmount    Float               @default(0)
+  totalAmount       Float
+  terms             String?
+  notes             String?
+  status            String              @default("pending") // pending, processing, completed, cancelled
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  items             SalesOrderItem[]
+  deliveryChallans  DeliveryChallan[]
+  invoices          Invoice[]
+
+  @@unique([companyId, orderNumber])
+  @@map("sales_orders")
+}
+
+model SalesOrderItem {
+  id                String      @id @default(uuid())
+  orderId           String
+  order             SalesOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId         String?
+  product           Product?    @relation(fields: [productId], references: [id])
+  description       String
+  quantity          Float
+  unitPrice         Float
+  taxRate           Float       @default(0)
+  taxAmount         Float
+  discountAmount    Float       @default(0)
+  totalAmount       Float
+  createdAt         DateTime    @default(now())
+
+  @@map("sales_order_items")
+}
+
+// Delivery Challans
+model DeliveryChallan {
+  id                String                @id @default(uuid())
+  challanNumber     String
+  salesOrderId      String?
+  salesOrder        SalesOrder?           @relation(fields: [salesOrderId], references: [id])
+  customerId        String
+  customer          Customer              @relation(fields: [customerId], references: [id])
+  companyId         String
+  company           Company               @relation(fields: [companyId], references: [id])
+  deliveryDate      DateTime              @default(now())
+  vehicleNumber     String?
+  transportMode     String?
+  subtotal          Float
+  taxAmount         Float
+  totalAmount       Float
+  notes             String?
+  status            String                @default("pending") // pending, in_transit, delivered
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  items             DeliveryChallanItem[]
+
+  @@unique([companyId, challanNumber])
+  @@map("delivery_challans")
+}
+
+model DeliveryChallanItem {
+  id                String           @id @default(uuid())
+  challanId         String
+  challan           DeliveryChallan  @relation(fields: [challanId], references: [id], onDelete: Cascade)
+  productId         String?
+  product           Product?         @relation(fields: [productId], references: [id])
+  description       String
+  quantity          Float
+  createdAt         DateTime         @default(now())
+
+  @@map("delivery_challan_items")
+}
+
+// Sales Returns
+model SalesReturn {
+  id                String            @id @default(uuid())
+  returnNumber      String
+  invoiceId         String?
+  invoice           Invoice?          @relation(fields: [invoiceId], references: [id])
+  customerId        String
+  customer          Customer          @relation(fields: [customerId], references: [id])
+  companyId         String
+  company           Company           @relation(fields: [companyId], references: [id])
+  returnDate        DateTime          @default(now())
+  subtotal          Float
+  taxAmount         Float
+  totalAmount       Float
+  reason            String?
+  notes             String?
+  status            String            @default("pending") // pending, approved, rejected
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  items             SalesReturnItem[]
+
+  @@unique([companyId, returnNumber])
+  @@map("sales_returns")
+}
+
+model SalesReturnItem {
+  id                String       @id @default(uuid())
+  returnId          String
+  return            SalesReturn  @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  productId         String?
+  product           Product?     @relation(fields: [productId], references: [id])
+  description       String
+  quantity          Float
+  unitPrice         Float
+  taxRate           Float        @default(0)
+  taxAmount         Float
+  totalAmount       Float
+  createdAt         DateTime     @default(now())
+
+  @@map("sales_return_items")
+}
+
+// ============ PURCHASE PROCESS MODELS ============
+
+// Purchase Quotations
+model PurchaseQuotation {
+  id                String                    @id @default(uuid())
+  quotationNumber   String
+  supplierId        String
+  supplier          Supplier                  @relation(fields: [supplierId], references: [id])
+  companyId         String
+  company           Company                   @relation(fields: [companyId], references: [id])
+  quotationDate     DateTime                  @default(now())
+  validUntil        DateTime?
+  subtotal          Float
+  taxAmount         Float
+  discountAmount    Float                     @default(0)
+  totalAmount       Float
+  terms             String?
+  notes             String?
+  status            String                    @default("draft") // draft, sent, accepted, rejected, expired
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  items             PurchaseQuotationItem[]
+  purchaseOrders    PurchaseOrder[]
+
+  @@unique([companyId, quotationNumber])
+  @@map("purchase_quotations")
+}
+
+model PurchaseQuotationItem {
+  id                String              @id @default(uuid())
+  quotationId       String
+  quotation         PurchaseQuotation   @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  productId         String?
+  product           Product?            @relation(fields: [productId], references: [id])
+  description       String
+  quantity          Float
+  unitPrice         Float
+  taxRate           Float               @default(0)
+  taxAmount         Float
+  discountAmount    Float               @default(0)
+  totalAmount       Float
+  createdAt         DateTime            @default(now())
+
+  @@map("purchase_quotation_items")
+}
+
+// Purchase Orders
+model PurchaseOrder {
+  id                String                @id @default(uuid())
+  orderNumber       String
+  quotationId       String?
+  quotation         PurchaseQuotation?    @relation(fields: [quotationId], references: [id])
+  supplierId        String
+  supplier          Supplier              @relation(fields: [supplierId], references: [id])
+  companyId         String
+  company           Company               @relation(fields: [companyId], references: [id])
+  orderDate         DateTime              @default(now())
+  expectedDelivery  DateTime?
+  subtotal          Float
+  taxAmount         Float
+  discountAmount    Float                 @default(0)
+  totalAmount       Float
+  terms             String?
+  notes             String?
+  status            String                @default("pending") // pending, processing, completed, cancelled
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  items             PurchaseOrderItem[]
+  goodsReceipts     GoodsReceipt[]
+
+  @@unique([companyId, orderNumber])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id                String          @id @default(uuid())
+  orderId           String
+  order             PurchaseOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId         String?
+  product           Product?        @relation(fields: [productId], references: [id])
+  description       String
+  quantity          Float
+  unitPrice         Float
+  taxRate           Float           @default(0)
+  taxAmount         Float
+  discountAmount    Float           @default(0)
+  totalAmount       Float
+  createdAt         DateTime        @default(now())
+
+  @@map("purchase_order_items")
+}
+
+// Goods Receipts
+model GoodsReceipt {
+  id                String              @id @default(uuid())
+  receiptNumber     String
+  purchaseOrderId   String?
+  purchaseOrder     PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id])
+  supplierId        String
+  supplier          Supplier            @relation(fields: [supplierId], references: [id])
+  companyId         String
+  company           Company             @relation(fields: [companyId], references: [id])
+  receiptDate       DateTime            @default(now())
+  subtotal          Float
+  taxAmount         Float
+  totalAmount       Float
+  notes             String?
+  status            String              @default("received") // received, inspected, accepted, rejected
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  items             GoodsReceiptItem[]
+
+  @@unique([companyId, receiptNumber])
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptItem {
+  id                String         @id @default(uuid())
+  receiptId         String
+  receipt           GoodsReceipt   @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  productId         String?
+  product           Product?       @relation(fields: [productId], references: [id])
+  description       String
+  quantity          Float
+  createdAt         DateTime       @default(now())
+
+  @@map("goods_receipt_items")
+}
+
+// Purchase Returns
+model PurchaseReturn {
+  id                String              @id @default(uuid())
+  returnNumber      String
+  supplierId        String
+  supplier          Supplier            @relation(fields: [supplierId], references: [id])
+  companyId         String
+  company           Company             @relation(fields: [companyId], references: [id])
+  returnDate        DateTime            @default(now())
+  subtotal          Float
+  taxAmount         Float
+  totalAmount       Float
+  reason            String?
+  notes             String?
+  status            String              @default("pending") // pending, approved, rejected
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  items             PurchaseReturnItem[]
+
+  @@unique([companyId, returnNumber])
+  @@map("purchase_returns")
+}
+
+model PurchaseReturnItem {
+  id                String          @id @default(uuid())
+  returnId          String
+  return            PurchaseReturn  @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  productId         String?
+  product           Product?        @relation(fields: [productId], references: [id])
+  description       String
+  quantity          Float
+  unitPrice         Float
+  taxRate           Float           @default(0)
+  taxAmount         Float
+  totalAmount       Float
+  createdAt         DateTime        @default(now())
+
+  @@map("purchase_return_items")
+}
+
+// ============ LEDGER TRACKING ============
+
+model LedgerEntry {
+  id                String   @id @default(uuid())
+  companyId         String
+  company           Company  @relation(fields: [companyId], references: [id])
+  accountId         String
+  account           Account  @relation(fields: [accountId], references: [id])
+  transactionDate   DateTime
+  debitAmount       Float    @default(0)
+  creditAmount      Float    @default(0)
+  balance           Float
+  description       String
+  referenceType     String   // invoice, bill, payment, journal, sales_order, purchase_order, etc.
+  referenceId       String
+  createdAt         DateTime @default(now())
+
+  @@index([companyId, accountId, transactionDate])
+  @@map("ledger_entries")
+}
