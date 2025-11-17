@@ -17,14 +17,18 @@ const corsOptions = {
 
     const allowedOrigins = process.env.CORS_ORIGIN?.split(',') || [
       'https://accounting.alexandratechlab.com',
+      'https://frontend-production-32b8.up.railway.app',
       'http://zirakbook.91.98.157.75.nip.io',
       'http://91.98.157.75',
       'http://localhost:3000',
       'http://localhost:8003'
     ];
 
-    // Check if origin is in allowed list or is any nip.io domain
-    if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('.nip.io') || origin.includes('alexandratechlab.com')) {
+    // Check if origin is in allowed list or is any Railway/nip.io domain
+    if (allowedOrigins.indexOf(origin) !== -1 ||
+        origin.includes('.railway.app') ||
+        origin.includes('.nip.io') ||
+        origin.includes('alexandratechlab.com')) {
       callback(null, true);
     } else {
       console.log(`⚠️  CORS blocked origin: ${origin}`);
@@ -75,6 +79,20 @@ const dashboardRoutes = require('./src/routes/dashboard');
 // Import middleware
 const { errorHandler, notFoundHandler } = require('./src/middleware/errorHandler');
 const { authMiddleware } = require('./src/middleware/auth');
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'ZirakBook Accounting API',
+    version: '2.0.0',
+    endpoints: {
+      health: '/api/v1/health',
+      auth: '/api/v1/auth',
+      docs: 'https://github.com/maanisingh/zirabook-accounting-backend'
+    }
+  });
+});
 
 // Health check endpoint
 app.get('/api/v1/health', (req, res) => {
